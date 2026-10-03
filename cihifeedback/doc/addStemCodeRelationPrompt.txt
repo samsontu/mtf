@@ -1,0 +1,12 @@
+Add Step 4
+1. From rowsWithSuggestedCode.xlsx, generate 3 files
+- rowsWithSuggestedCodesPostcoordinated.xlsx: those rows where Suggested/Corrected Mapped ICD-10 /ICD-11 Code (column K) value is a postcoordinated expression (cluster code)
+- rowsWithSuggestedCodesYtargets.xlsx: remaining rows where Suggested/Corrected Mapped ICD-10 /ICD-11 Code (column K) value is a X.Y Code
+- rowsWithSuggestedCodesStemCodes.xlsx: remaining rows where Suggested/Corrected Mapped ICD-10 /ICD-11 Code (column K) is a stem Code
+Check that every code falls into one of the three categories
+2. Copy rowsWithSuggestedCodesStemCodes.xlsx to rowsWithSuggestedStemCodesMappingRules.xlsx
+3. For rowsWithSuggestedStemCodesMappingRules.xlsx entries, 
+a. if column P (Suggested/Corrected Mapped Foundation Entity) is empty, use the ICD API to map the "Suggested/Corrected Mapped ICD-10 /ICD-11 Code" (column K) to its Foundation URI
+b. add column U "Completed Code Mapping Relation", column V "Reasoning"
+c. For each row where column M "Corrected Code Mapping Relation" is not empty, copy column M value to column U and "Manual" to column V; 
+d. For rows without predefined relation (empty column M), apply the rules in determine-stemcode-semantic-relationships for column U, V values
