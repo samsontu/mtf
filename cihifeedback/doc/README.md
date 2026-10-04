@@ -64,10 +64,12 @@ From step 3 (`bin/generateUnfixedFeedbackAndSplits.py`):
 
 From step 4 (`bin/generateMappingRelationsAndRules.py`):
 - **`rowsWithSuggestedCode-stemCode-relationsAndRules.xlsx`** — the stem-code rows with the Foundation entity (P), mapping relation (U) and reasoning (V) from stage 1, and the descendant match (W–Y), proposed mapping rule (Z), rule notes (AA) and confidence with rationale (AB–AC) from stage 2.
+  Both `-relationsAndRules` files start with a README sheet describing every column.
 - **`rowsWithSuggestedCode-postcoordinated-relationsAndRules.xlsx`** — the post-coordinated rows with title (L), Foundation expression (P), relation (U), reasoning incl. MMS validity (V), existing or new Foundation entity (W–Y), proposed mapping rule (Z), rule notes (AA) and confidence with rationale (AB–AC), from stage 3.
 
 ## Docs (`doc/`)
 
+- **`Results.md`** — statistics for the step-4 mapping relations and rules (MMS 2026-01).
 - **`Method.md`** — algorithm, case definitions, per-case column mapping, the 2026 cross-reference logic, and the stem-code relation and mapping-rule step.
 - **`cihifeedback-prompts.md`** — original prompts for steps 1–3.
 - **`addStemCodeRelationPrompt.txt`** — original specification for step 4, stage 1.
