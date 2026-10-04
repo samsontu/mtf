@@ -1,0 +1,26 @@
+You are generating logical mapping rules from corrected ICD-10 to ICD-11 mappings. 
+
+Read AllBatches_ForSamson_V1clean.xlsx. First, filter the pairs of rows with the same WHO_icd10Code as follows:
+1. Include only rows where the 'Actions for WHO' column values include case-insensitive "Update WHO map" or "Update map" (there may be additional words in the column)
+2. Ignore rows where the WHO_icd10Code has the form 'X.8'
+3. For each WHO_icd10Code S, 
+	if the 'Conflict Resolution team decision' is 'CIHI map correct', then the target map T1 is the value of the 'CIHI ICD-11 code' value and the predicate is the value of "Additional CIHI Info - Equivalence  E=Equivalent; B=Broader; N=Narrower"
+	If the 'Conflict Resolution team decision' is 'Neither correct', then the target map T1 is the value of the 'Review team ICD-11 coding if neither correct' value, and determine the predicate using the rules in determine-semantic-relationships.md
+4. Ignore rows where T1 values include ICD-11 codes that end with the 'Y' character
+
+For the remaining rows, for each ICD-10 source code S, with the suggested correction T1, and its Foundation subclasses T1sub.
+If T1 is a stem code, use ICD-11 API's linearization endpoint to find T1's corresponding Foundation URI T1U (the source field) and T1U's subclasses T1sub (using the "include=descendant flag)
+    If the mapping predicate is ‘equivalent’, propose the mapping rule S ≡ T1U
+    If the mapping predicate is ’narrower’ (target is narrower than source), propose the mapping rule S ⊃ T1U 
+    If the mapping predicate is ‘broader’ (the target is broader than the source), then search for the best T2 match (T2U) among T1sub (using the ICD-11 API's autocode endpoint), and 
+        If the mapping predicate is ‘equivalent,' propose the mapping rule S ≡ T2U
+        If the mapping predicate is ‘broader’, propose the mapping rule S ⊂ T2U
+		If the mapping predicate is neither ‘equivalent' nor 'broader', find the most specific ancestor of T2U that is broader than T2U, reset T2U to be this ancestor, and propose the rule S ⊂ T2U
+If T1 is a cluster of codes, use the “describe" endpoint to check whether it has an equivalent Foundation URI T3U
+    If there is a T3U, propose the mapping rule S ≡ T3U
+    If there is no T3U, propose a new Foundation entity T4U with a logical definition corresponding to the post-coordination and a mapping rule S ≡ T4U. 
+
+Write to a file with the following fields:
+
+WHO_icd10Code	WHO_icd10Title	Updated WHO_icd11Code	Updated WHO_icd11Title	ICD-11 link	Relation	Suggested MMS target (T1)	Suggested MMS title	T1 URI (T1U)	T1U mapping predicate	Descendant match (T2U)	Descendant match title	T2U predicate	cluster equivalent Foundation URI (T3U)	T3U title	New Foundation entity (T4U) definition	Proposed mapping rule	Decision	Predicate source	Notes	Disposition
+

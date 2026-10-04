@@ -205,3 +205,19 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# cihifeedback: legacy scripts and their outputs (not part of the pipeline)
+cihifeedback/bin/legacy/
+cihifeedback/legacy/
+
+# cihifeedback: WHO ICD-API client id and secret
+cihifeedback/bin/icdapi_credentials.json
+
+# cihifeedback: CodeFusion cross-check analysis (not part of the pipeline)
+cihifeedback/CodeFusionCheck/
+
+# cihifeedback: residual-code (.8/.9) analysis (not part of the pipeline)
+cihifeedback/residuals/
+
+# Microsoft Office lock files
+~$*
