@@ -70,7 +70,9 @@ import unicodedata
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+from datetime import date
 from openpyxl import load_workbook
+from openpyxl.styles import Alignment, Font, PatternFill
 
 import icdapi  # bin/icdapi.py: WHO ICD-API helpers
 
@@ -232,7 +234,7 @@ def set_header(ws, col, name, width):
 def stage1(sess, release):
     shutil.copyfile(SRC, OUT_REL)
     wb = load_workbook(OUT_REL)
-    ws = wb[wb.sheetnames[0]]
+    ws = data_sheet(wb)
     rows = [r for r in range(2, ws.max_row + 1) if ws.cell(r, COL_K).value is not None]
     codes = sorted({clean(ws.cell(r, COL_K).value) for r in rows})
     with ThreadPoolExecutor(12) as ex:
@@ -471,9 +473,166 @@ def grade_pc(g, s_title, k, why, t3, t3title, t4, rule, notes):
     return level, sentence(parts)
 
 
+
+# ------------------------------------------------------------------
+# README sheet
+# ------------------------------------------------------------------
+def data_sheet(wb):
+    """The data sheet: the first sheet that is not the README."""
+    return next(ws for ws in wb.worksheets if ws.title != "README")
+
+
+# Columns A-V are common to both output files: (header, meaning, values).
+README_COMMON = [
+    ("Organization/Affiliation", "Organization giving the feedback.", "CIHI"),
+    ("Date", "Date of CIHI's feedback.", "2025-07-04"),
+    ("Name", "Contact person for the feedback.", "Sharon Baker"),
+    ("Contact Details", "Contact address for the feedback.", "whofic.mtf@gmail.com"),
+    ("Version of WHO Mapping Table", "WHO map that CIHI reviewed.", "2022 10To11MapToOneCategory"),
+    ("Map direction", "Direction of the reviewed map.", "Forward (ICD-10 to ICD-11)"),
+    ("WHO ICD-10 / ICD-11 Code", "ICD-10 source code (S in the rules).", "An ICD-10 code, e.g. A84.9"),
+    ("WHO ICD-10 / ICD-11 Code Title", "Title of the ICD-10 source code.", "Text"),
+    ("WHO Mapped ICD-10/ ICD-11 Code", "ICD-11 MMS code that the WHO 2022 map assigns to the source.", "An ICD-11 MMS code"),
+    ("WHO Mapped ICD-10 / ICD-11 Title", "Title of the WHO-mapped code.", "Text"),
+    None,  # K: file-specific
+    None,  # L: file-specific
+    ("Corrected Code Mapping Relation",
+     "CIHI's relation of the suggested code (K) to the source, from CIHI's E/B/N assessment.",
+     "Equivalent; Broader (target broader than source); Narrower (target narrower than source); "
+     "empty = not assessed by CIHI"),
+    ("Comment", "Comments of the CIHI reviewers and conflict-resolution team.", "Free text, or empty"),
+    ("WHO Mapped Foundation Entity", "Foundation entity of the WHO-mapped code.", "Empty (not filled)"),
+    None,  # P: file-specific
+    ("Additional Comments", "CIHI's reason why its map differs from WHO's.",
+     "NoMatch_2022CodingTool Guides to CIHI chosen map; NoMatch_2023CodingTool Guides to CIHI chosen map; "
+     "NoMatch_Residual Y versus Z; NoMatch_Validator decision; NoMatch_1:many stem code map possible (...); "
+     "NoMatch_WHO maps to category level; NoMatch_No WHO map available; or empty"),
+    ("Action for WHO", "Action CIHI asks WHO to take. Only rows containing 'Update WHO map' or starting with "
+     "'Update map' get a mapping rule.",
+     "Mostly 'Update WHO map', sometimes with 'Add index term.', 'Review indexing.', 'Add postcoordination.' "
+     "or 'See comment.'; occasionally other text (e.g. 'Review modelling.')"),
+    ("Details", "Details of the requested action.", "Empty (not filled)"),
+    ("Status", "Status of the feedback, for WHO to fill in.", "Empty"),
+    ("Completed Code Mapping Relation",
+     "Relation of the suggested code (K) to the ICD-10 source: CIHI's relation (M) where present, "
+     "otherwise inferred.",
+     "Equivalent (same concept); Broader (target broader than source); Narrower (target narrower than "
+     "source); Related (overlapping or different concepts)"),
+    None,  # V: file-specific
+]
+
+README_STEM = {
+    "K": ("Suggested/Corrected Mapped ICD-10 /ICD-11 Code",
+          "CIHI's suggested ICD-11 code (T1 in the rules).",
+          "A single ICD-11 MMS stem code not ending in Y, e.g. 1C8G.Z"),
+    "L": ("Suggested/Corrected Mapped ICD-10 / ICD-11 Code Title", "Title of the suggested code.",
+          "Empty (not filled for stem codes)"),
+    "P": ("Suggested/Corrected Mapped Foundation Entity",
+          "Foundation entity of the suggested code (T1U). Residual categories (.Z) are mapped to the "
+          "Foundation entity of their parent.",
+          "A Foundation URI, e.g. http://id.who.int/icd/entity/835129952"),
+    "V": ("Reasoning", "How the relation in U was obtained.",
+          "'Manual' (copied from M); 'Rule n: ... Target: <Foundation title>' (rules of "
+          "determine-stemcode-semantic-relationships.md); or 'Medical-knowledge check: <reason> (rules gave ...)'"),
+    "W": ("Descendant match (T2U)",
+          "For Broader rows: the Foundation entity below T1U used as the rule target, i.e. a closer match to "
+          "the source or the most specific broader ancestor of one.",
+          "A Foundation URI, or empty (rule uses T1U, or no rule)"),
+    "X": ("Descendant match title", "Title of the descendant match.", "Text, or empty"),
+    "Y": ("Descendant match relation", "Relation of the descendant match to the source.",
+          "Equivalent; Broader; or empty"),
+    "Z": ("Proposed mapping rule",
+          "Proposed Foundation mapping rule for the ICD-10 source S. ≡: S is equivalent to the entity; "
+          "⊂: the entity is broader than S; ⊃: the entity is narrower than S.",
+          "'S ≡ URI', 'S ⊂ URI' or 'S ⊃ URI'; empty = no rule"),
+    "AA": ("Rule notes", "How the rule target was found, or why there is no rule.",
+           "e.g. 'T2 via Foundation search in T1U subtree'; '...reset to the most specific broader ancestor'; "
+           "'no match among T1U's descendants'; 'T1U has no descendants'; 'No rule: Action for WHO is ...'; "
+           "'No rule: ICD-10 source is an X.8 'other' residual'; 'No rule: relation is 'Related'; review'"),
+}
+
+README_PC = {
+    "K": ("Suggested/Corrected Mapped ICD-10 /ICD-11 Code",
+          "CIHI's suggested post-coordinated ICD-11 expression (T1 in the rules).",
+          "MMS codes joined by & (extension code) and / (cluster), e.g. 2E92.4Z&XA2G13, 1C41/1G40"),
+    "L": ("Suggested/Corrected Mapped ICD-10 / ICD-11 Code Title",
+          "Readable meaning of the expression, from the MMS 'describe' service (or assembled code by code "
+          "when MMS rejects the combination).",
+          "Text, e.g. 'Benign neoplasm of the large intestine, unspecified [Descending colon]'"),
+    "P": ("Suggested/Corrected Mapped Foundation Entity",
+          "Foundation expression of the post-coordination.",
+          "Foundation URIs joined by ' & ' and ' / '"),
+    "V": ("Reasoning", "How the relation in U was obtained, and whether MMS accepts the expression.",
+          "'Manual' (copied from M); 'Rule n: ... Target: <label>'; or 'Medical-knowledge check: <reason> "
+          "(rules gave ...)'; any of these may end with 'Not a valid MMS post-coordination: <MMS reason>'"),
+    "W": ("Precoordinated equivalent (T3U)",
+          "An existing Foundation entity, under the expression's stem, equivalent to the source.",
+          "A Foundation URI, or empty"),
+    "X": ("T3U title", "Title of T3U.", "Text, or empty"),
+    "Y": ("New Foundation entity (T4U) definition",
+          "Logical definition of a proposed new Foundation entity equivalent to the source, built from the "
+          "post-coordination.",
+          "'URI(title)&URI(title)/...', or empty"),
+    "Z": ("Proposed mapping rule",
+          "Proposed Foundation mapping rule for the ICD-10 source S. Only equivalence rules are proposed for "
+          "post-coordinations.",
+          "'S ≡ URI' (existing entity T3U) or 'S ≡ T4U[new entity: ...]'; empty = no rule"),
+    "AA": ("Rule notes", "Why there is or is not a rule.",
+           "'Existing Foundation entity under the stem is equivalent to the source'; 'No equivalent Foundation "
+           "entity; propose a new one defined by the post-coordination' (may add '; review: the "
+           "post-coordination is not valid in MMS'); 'No rule: the post-coordination contains a code ending "
+           "in Y'; 'No rule: the post-coordination is <relation> relative to the source; review'; "
+           "'No rule: Action for WHO is ...'; 'No rule: ICD-10 source is an X.8 ...'"),
+}
+
+README_CONFIDENCE = {
+    "AB": ("Confidence", "Confidence in the proposed rule, or in the relation when there is no rule.",
+           "high; medium; low"),
+    "AC": ("Confidence rationale", "Reasons for the confidence grade (see doc/Method.md, Confidence).",
+           "Text"),
+}
+
+
+def add_readme(wb, title, summary, specific, release):
+    """(Re)create a README sheet, first in the workbook, describing every column."""
+    from openpyxl.utils import get_column_letter
+    if "README" in wb.sheetnames:
+        del wb["README"]
+    ws = wb.create_sheet("README", 0)
+    data = data_sheet(wb)
+    n = sum(1 for r in range(2, data.max_row + 1) if data.cell(r, COL_K).value is not None)
+    lines = [title, ""] + summary + [
+        "",
+        f"Rows: {n} (sheet '{data.title}'). Generated {date.today().isoformat()} by "
+        f"bin/generateMappingRelationsAndRules.py using ICD-11 MMS {release}.",
+        "Columns A-T follow the WHO Mapping Feedback Template; columns U-AC are added by step 4. "
+        "See doc/Method.md and doc/mappingRulesSpecification.md.",
+        "",
+    ]
+    for i, text in enumerate(lines, start=1):
+        ws.cell(i, 1, text).alignment = Alignment(wrap_text=False)
+    ws.cell(1, 1).font = Font(bold=True, size=14)
+    head = len(lines) + 1
+    for c, h in enumerate(("Column", "Header", "Meaning", "Possible values"), start=1):
+        cell = ws.cell(head, c, h)
+        cell.font = Font(bold=True)
+        cell.fill = PatternFill("solid", fgColor="DDDDDD")
+    spec = {**specific, **README_CONFIDENCE}
+    for i in range(1, 30):
+        letter = get_column_letter(i)
+        entry = README_COMMON[i - 1] if i <= len(README_COMMON) and README_COMMON[i - 1] else spec[letter]
+        header, meaning, values = entry
+        row = head + i
+        for c, v in enumerate((letter, header, meaning, values), start=1):
+            ws.cell(row, c, v).alignment = Alignment(wrap_text=True, vertical="top")
+    for letter, width in (("A", 9), ("B", 42), ("C", 60), ("D", 70)):
+        ws.column_dimensions[letter].width = width
+    wb.active = 0
+
+
 def stage2(sess, release):
     wb = load_workbook(OUT_REL)
-    ws = wb[wb.sheetnames[0]]
+    ws = data_sheet(wb)
     if ws.cell(1, COL_U).value != "Completed Code Mapping Relation":
         raise SystemExit(f"{OUT_REL.name} has no stage-1 columns; run stage 1 first.")
     rows = [r for r in range(2, ws.max_row + 1) if ws.cell(r, COL_K).value is not None]
@@ -498,6 +657,12 @@ def stage2(sess, release):
                                    str(ws.cell(r, COL_V).value or ""), *res)
         ws.cell(r, COL_CONF, level)
         ws.cell(r, COL_CONF_WHY, reason)
+    add_readme(wb, "Mapping relations and proposed Foundation mapping rules: stem-code suggestions",
+               ["Each row is a still-actionable CIHI feedback entry whose suggested ICD-11 code (column K) is a "
+                "single MMS stem code.",
+                "Step 4 adds the Foundation entity of that code (P), its relation to the ICD-10 source (U, V), "
+                "a proposed Foundation mapping rule (W-AA) and a confidence grade (AB, AC)."],
+               README_STEM, release)
     wb.save(OUT_REL)
     conf = {lv: sum(1 for r in rows if ws.cell(r, COL_CONF).value == lv) for lv in LEVELS}
 
@@ -668,7 +833,7 @@ def find_t3(sess, g, s_title, stem_uri):
 def stage3(sess, release):
     shutil.copyfile(SRC_PC, OUT_PC)
     wb = load_workbook(OUT_PC)
-    ws = wb[wb.sheetnames[0]]
+    ws = data_sheet(wb)
     rows = [r for r in range(2, ws.max_row + 1) if ws.cell(r, COL_K).value is not None]
     def expr_of(r):
         return re.sub(r"\s*([&/])\s*", r"\1", clean(ws.cell(r, COL_K).value))
@@ -741,6 +906,12 @@ def stage3(sess, release):
         ws.cell(r, COL_V, why)
         for (col, _, _), v in zip(PC_COLS, rule_cols):
             ws.cell(r, col, v or None)
+    add_readme(wb, "Mapping relations and proposed Foundation mapping rules: post-coordinated suggestions",
+               ["Each row is a still-actionable CIHI feedback entry whose suggested ICD-11 code (column K) is a "
+                "post-coordinated expression.",
+                "Step 4 adds the expression's meaning (L) and Foundation expression (P), its relation to the "
+                "ICD-10 source (U, V), a proposed Foundation mapping rule (W-AA) and a confidence grade (AB, AC)."],
+               README_PC, release)
     wb.save(OUT_PC)
 
     conf = {lv: sum(1 for x in results if x[5][5] == lv) for lv in LEVELS}

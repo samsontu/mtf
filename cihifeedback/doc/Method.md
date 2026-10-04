@@ -328,6 +328,10 @@ post-coordinated suggestions and writes
 stages run; `--stage 1`, `2` or `3` runs one (stage 2 reads the existing
 stage-1 output).
 
+Both output files open on a **README** sheet, written by stages 2 and 3,
+that describes the file and gives the meaning and possible values of
+every column (A–AC); the data are on the second sheet.
+
 Suggestions whose code is an "other specified" Y code
 (`rowsWithSuggestedCode-Ytargets.xlsx`) are not processed.
 
